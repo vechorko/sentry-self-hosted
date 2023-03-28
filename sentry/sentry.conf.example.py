@@ -3,6 +3,13 @@
 
 from sentry.conf.server import *  # NOQA
 
+BYTE_MULTIPLIER = 1024
+UNITS = ("K", "M", "G")
+def unit_text_to_bytes(text):
+    unit = text[-1].upper()
+    power = UNITS.index(unit) + 1
+    return float(text[:-1])*(BYTE_MULTIPLIER**power)
+
 
 # Generously adapted from pynetlinux: https://github.com/rlisagor/pynetlinux/blob/e3f16978855c6649685f0c43d4c3fcf768427ae5/pynetlinux/ifconfig.py#L197-L223
 def get_internal_network():
@@ -29,18 +36,33 @@ def get_internal_network():
     netmask_bits = 32 - int(round(math.log(ctypes.c_uint32(~netmask).value + 1, 2), 1))
     return "{0:s}/{1:d}".format(base, netmask_bits)
 
+def strtobool(val):
+    """Convert a string representation of truth to true (1) or false (0).
+    True values are 'y', 'yes', 't', 'true', 'on', and '1'; false values
+    are 'n', 'no', 'f', 'false', 'off', and '0'.  Raises ValueError if
+    'val' is anything else.
+    """
+    val = val.lower()
+    if val in ('y', 'yes', 't', 'true', 'on', '1'):
+        return 1
+    elif val in ('n', 'no', 'f', 'false', 'off', '0'):
+        return 0
+    else:
+        raise ValueError("invalid truth value %r" % (val,))
 
 INTERNAL_SYSTEM_IPS = (get_internal_network(),)
 
+import os
+env = os.environ.get
 
 DATABASES = {
     "default": {
         "ENGINE": "sentry.db.postgres",
-        "NAME": "postgres",
-        "USER": "postgres",
-        "PASSWORD": "",
-        "HOST": "postgres",
-        "PORT": "",
+        "NAME": env("POSTGRES_DB"),
+        "USER": env("POSTGRES_USER"),
+        "PASSWORD": env("POSTGRES_PASSWORD"),
+        "HOST": env("POSTGRES_HOST"),
+        "PORT": env("POSTGRES_PORT")
     }
 }
 
@@ -70,11 +92,20 @@ SENTRY_OPTIONS["system.event-retention-days"] = int(
 # Generic Redis configuration used as defaults for various things including:
 # Buffers, Quotas, TSDB
 
-SENTRY_OPTIONS["redis.clusters"] = {
-    "default": {
-        "hosts": {0: {"host": "redis", "password": "", "port": "6379", "db": "0"}}
-    }
-}
+SENTRY_OPTIONS.update({
+    'redis.clusters': {
+        'default': {
+            'hosts': {
+                0: {
+                    'host': env("REDIS_HOST"),
+                    'password': '',
+                    'port': str(env("REDIS_PORT")),
+                    'db': '0',
+                },
+            },
+        },
+    },
+})
 
 #########
 # Queue #
@@ -107,6 +138,9 @@ CACHES = {
         "BACKEND": "django.core.cache.backends.memcached.MemcachedCache",
         "LOCATION": ["memcached:11211"],
         "TIMEOUT": 3600,
+        "OPTIONS": {
+            "server_max_value_length": unit_text_to_bytes(env("SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE", "1M")),
+        },
     }
 }
 
@@ -233,8 +267,25 @@ SENTRY_WEB_OPTIONS = {
 # Mail #
 ########
 
-SENTRY_OPTIONS["mail.list-namespace"] = env('SENTRY_MAIL_HOST', 'localhost')
-SENTRY_OPTIONS["mail.from"] = f"sentry@{SENTRY_OPTIONS['mail.list-namespace']}"
+SENTRY_OPTIONS["mail.backend"] = "smtp"
+SENTRY_OPTIONS["mail.host"] = env("EMAIL_HOST")
+SENTRY_OPTIONS["mail.password"] = env("EMAIL_PASSWORD")
+SENTRY_OPTIONS["mail.username"] = env("EMAIL_USERNAME")
+SENTRY_OPTIONS["mail.port"] = int(env("EMAIL_PORT") or 25)
+SENTRY_OPTIONS["mail.use-tls"] = bool(strtobool(env("EMAIL_USE_TLS", "true")))
+SENTRY_OPTIONS["mail.use-ssl"] = bool(strtobool(env("EMAIL_USE_SSL", "false")))
+SENTRY_OPTIONS['mail.from'] = env("EMAIL_FROM")
+SENTRY_OPTIONS["mail.list-namespace"] = env('EMAIL_HOST', 'localhost')
+
+
+SENTRY_OPTIONS["filestore.backend"] = "s3"
+SENTRY_OPTIONS["filestore.options"] = {
+    "access_key": env("AWS_ACCESS_KEY"),
+    "secret_key": env("AWS_SECRET_KEY"),
+    "bucket_name": env("S3_BUCKET_NAME"),
+    "region_name": env("S3_REGION"),
+    "default_acl": "private"
+}
 
 ############
 # Features #
@@ -268,6 +319,12 @@ SENTRY_FEATURES.update(
         )
     }
 )
+
+# SENTRY_FEATURES.update(
+#     {
+#         feature: True for feature in SENTRY_FEATURES.keys()
+#     }
+# )
 
 #######################
 # MaxMind Integration #

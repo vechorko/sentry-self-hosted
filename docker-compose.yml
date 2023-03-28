@@ -24,16 +24,16 @@ x-sentry-defaults: &sentry_defaults
     args:
       - SENTRY_IMAGE
   depends_on:
-    redis:
-      <<: *depends_on-healthy
+    # redis:
+    #   <<: *depends_on-healthy
     kafka:
       <<: *depends_on-healthy
-    postgres:
-      <<: *depends_on-healthy
+    # postgres:
+    #   <<: *depends_on-healthy
     memcached:
       <<: *depends_on-default
-    smtp:
-      <<: *depends_on-default
+    # smtp:
+    #   <<: *depends_on-default
     snuba-api:
       <<: *depends_on-default
     snuba-consumer:
@@ -54,6 +54,7 @@ x-sentry-defaults: &sentry_defaults
       <<: *depends_on-default
   entrypoint: "/etc/sentry/entrypoint.sh"
   command: ["run", "web"]
+  env_file: .env
   environment:
     PYTHONUSERBASE: "/data/custom-packages"
     SENTRY_CONF: "/etc/sentry"
@@ -82,27 +83,28 @@ x-snuba-defaults: &snuba_defaults
       <<: *depends_on-healthy
     kafka:
       <<: *depends_on-healthy
-    redis:
-      <<: *depends_on-healthy
+    # redis:
+    #   <<: *depends_on-healthy
   image: "$SNUBA_IMAGE"
+  env_file: .env
   environment:
     SNUBA_SETTINGS: self_hosted
     CLICKHOUSE_HOST: clickhouse
     DEFAULT_BROKERS: "kafka:9092"
-    REDIS_HOST: redis
+    # REDIS_HOST: redis
     UWSGI_MAX_REQUESTS: "10000"
     UWSGI_DISABLE_LOGGING: "true"
     # Leaving the value empty to just pass whatever is set
     # on the host system (or in the .env file)
     SENTRY_EVENT_RETENTION_DAYS:
 services:
-  smtp:
-    <<: *restart_policy
-    image: tianon/exim4
-    hostname: "${SENTRY_MAIL_HOST:-}"
-    volumes:
-      - "sentry-smtp:/var/spool/exim4"
-      - "sentry-smtp-log:/var/log/exim4"
+  # smtp:
+  #   <<: *restart_policy
+  #   image: tianon/exim4
+  #   hostname: "${SENTRY_MAIL_HOST:-}"
+  #   volumes:
+  #     - "sentry-smtp:/var/spool/exim4"
+  #     - "sentry-smtp-log:/var/log/exim4"
   memcached:
     <<: *restart_policy
     image: "memcached:1.6.9-alpine"
@@ -110,44 +112,44 @@ services:
       <<: *healthcheck_defaults
       # From: https://stackoverflow.com/a/31877626/5155484
       test: echo stats | nc 127.0.0.1 11211
-  redis:
-    <<: *restart_policy
-    image: "redis:6.2.10-alpine"
-    healthcheck:
-      <<: *healthcheck_defaults
-      test: redis-cli ping
-    volumes:
-      - "sentry-redis:/data"
-    ulimits:
-      nofile:
-        soft: 10032
-        hard: 10032
-  postgres:
-    <<: *restart_policy
-    image: "postgres:9.6"
-    healthcheck:
-      <<: *healthcheck_defaults
-      # Using default user "postgres" from sentry/sentry.conf.example.py or value of POSTGRES_USER if provided
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
-    command:
-      [
-        "postgres",
-        "-c",
-        "wal_level=logical",
-        "-c",
-        "max_replication_slots=1",
-        "-c",
-        "max_wal_senders=1",
-      ]
-    environment:
-      POSTGRES_HOST_AUTH_METHOD: "trust"
-    entrypoint: /opt/sentry/postgres-entrypoint.sh
-    volumes:
-      - "sentry-postgres:/var/lib/postgresql/data"
-      - type: bind
-        read_only: true
-        source: ./postgres/
-        target: /opt/sentry/
+  # redis:
+  #   <<: *restart_policy
+  #   image: "redis:6.2.10-alpine"
+  #   healthcheck:
+  #     <<: *healthcheck_defaults
+  #     test: redis-cli ping
+  #   volumes:
+  #     - "sentry-redis:/data"
+  #   ulimits:
+  #     nofile:
+  #       soft: 10032
+  #       hard: 10032
+  # postgres:
+  #   <<: *restart_policy
+  #   image: "postgres:9.6"
+  #   healthcheck:
+  #     <<: *healthcheck_defaults
+  #     # Using default user "postgres" from sentry/sentry.conf.example.py or value of POSTGRES_USER if provided
+  #     test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+  #   command:
+  #     [
+  #       "postgres",
+  #       "-c",
+  #       "wal_level=logical",
+  #       "-c",
+  #       "max_replication_slots=1",
+  #       "-c",
+  #       "max_wal_senders=1",
+  #     ]
+  #   environment:
+  #     POSTGRES_HOST_AUTH_METHOD: "trust"
+  #   entrypoint: /opt/sentry/postgres-entrypoint.sh
+  #   volumes:
+  #     - "sentry-postgres:/var/lib/postgresql/data"
+  #     - type: bind
+  #       read_only: true
+  #       source: ./postgres/
+  #       target: /opt/sentry/
   zookeeper:
     <<: *restart_policy
     image: "confluentinc/cp-zookeeper:5.5.7"
@@ -352,6 +354,7 @@ services:
   relay:
     <<: *restart_policy
     image: "$RELAY_IMAGE"
+
     volumes:
       - type: bind
         read_only: true
@@ -364,18 +367,18 @@ services:
     depends_on:
       kafka:
         <<: *depends_on-healthy
-      redis:
-        <<: *depends_on-healthy
+      # redis:
+      #   <<: *depends_on-healthy
       web:
         <<: *depends_on-healthy
 volumes:
   # These store application data that should persist across restarts.
   sentry-data:
     external: true
-  sentry-postgres:
-    external: true
-  sentry-redis:
-    external: true
+  # sentry-postgres:
+  #   external: true
+  # sentry-redis:
+  #   external: true
   sentry-zookeeper:
     external: true
   sentry-kafka:
@@ -387,9 +390,9 @@ volumes:
 
   # These store ephemeral data that needn't persist across restarts.
   sentry-secrets:
-  sentry-smtp:
+  # sentry-smtp:
   sentry-nginx-cache:
   sentry-zookeeper-log:
   sentry-kafka-log:
-  sentry-smtp-log:
+  # sentry-smtp-log:
   sentry-clickhouse-log:
